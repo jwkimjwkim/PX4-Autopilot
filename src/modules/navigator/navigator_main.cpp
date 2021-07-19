@@ -283,6 +283,8 @@ Navigator::run()
 					rep->current.loiter_direction = 1;
 					rep->current.type = position_setpoint_s::SETPOINT_TYPE_LOITER;
 
+					bool only_alt_change_requested = false;
+
 					// If no argument for ground speed, use default value.
 					if (cmd.param1 <= 0 || !PX4_ISFINITE(cmd.param1)) {
 						rep->current.cruising_speed = get_cruising_speed();
@@ -318,9 +320,10 @@ Navigator::run()
 
 					} else if (PX4_ISFINITE(cmd.param7)) {
 						// Received only a request to change altitude, thus we keep the setpoint
-						rep->current.lat = curr->current.lat;
-						rep->current.lon = curr->current.lon;
+						rep->current.lat = PX4_ISFINITE(curr->current.lat) ? curr->current.lat : get_global_position()->lat;
+						rep->current.lon = PX4_ISFINITE(curr->current.lon) ? curr->current.lon : get_global_position()->lon;
 						rep->current.alt = cmd.param7;
+						only_alt_change_requested = true;
 
 					} else {
 						// All three set to NaN - pause vehicle
@@ -354,7 +357,23 @@ Navigator::run()
 						}
 					}
 
-					rep->previous.valid = true;
+					if (only_alt_change_requested) {
+						if (PX4_ISFINITE(curr->current.loiter_radius) && curr->current.loiter_radius > 0) {
+							rep->current.loiter_radius = curr->current.loiter_radius;
+
+
+						} else {
+							rep->current.loiter_radius = get_loiter_radius();
+						}
+
+						if (curr->current.loiter_direction == 1 || curr->current.loiter_direction == -1) {
+							rep->current.loiter_direction = curr->current.loiter_direction;
+
+						} else {
+							rep->current.loiter_direction = 1;
+						}
+					}
+
 					rep->previous.timestamp = hrt_absolute_time();
 
 					rep->current.valid = true;

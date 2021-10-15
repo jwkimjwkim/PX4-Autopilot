@@ -679,11 +679,23 @@ FixedwingPositionControl::set_control_mode_current(bool pos_sp_curr_valid)
 		return; // do not publish the setpoint
 	}
 
-	if ((_control_mode.flag_control_auto_enabled || _control_mode.flag_control_offboard_enabled) && pos_sp_curr_valid) {
+	if (((_control_mode.flag_control_auto_enabled && _control_mode.flag_control_position_enabled) ||
+	     _control_mode.flag_control_offboard_enabled) && pos_sp_curr_valid) {
 		_control_mode_current = FW_POSCTRL_MODE_AUTO;
 
-	} else if (_control_mode.flag_control_velocity_enabled && _control_mode.flag_control_altitude_enabled) {
-		if (_control_mode_current != FW_POSCTRL_MODE_POSITION) {
+	} else if (_control_mode.flag_control_auto_enabled && _control_mode.flag_control_altitude_enabled) {
+		if (_control_mode_current != FW_POSCTRL_MODE_AUTO_ALTITUDE) {
+			/* Need to init because last loop iteration was in a different mode */
+			_hold_alt = _current_altitude;
+		}
+
+		_control_mode_current = FW_POSCTRL_MODE_AUTO_ALTITUDE;
+
+	} else if (_control_mode.flag_control_auto_enabled && _control_mode.flag_control_climb_rate_enabled) {
+		_control_mode_current = FW_POSCTRL_MODE_AUTO_CLIMBRATE;
+
+	} else if (_control_mode.flag_control_manual_enabled && _control_mode.flag_control_position_enabled) {
+		if (_control_mode_current != FW_POSCTRL_MODE_MANUAL_POSITION) {
 			/* Need to init because last loop iteration was in a different mode */
 			_hold_alt = _current_altitude;
 			_hdg_hold_yaw = _yaw;
@@ -696,15 +708,16 @@ FixedwingPositionControl::set_control_mode_current(bool pos_sp_curr_valid)
 			_att_sp.yaw_body = 0;
 		}
 
-		_control_mode_current = FW_POSCTRL_MODE_POSITION;
+		_control_mode_current = FW_POSCTRL_MODE_MANUAL_POSITION;
 
-	} else if (_control_mode.flag_control_altitude_enabled) {
-		if (_control_mode_current != FW_POSCTRL_MODE_POSITION && _control_mode_current != FW_POSCTRL_MODE_ALTITUDE) {
+	} else if (_control_mode.flag_control_manual_enabled && _control_mode.flag_control_altitude_enabled) {
+		if (_control_mode_current != FW_POSCTRL_MODE_MANUAL_POSITION
+		    && _control_mode_current != FW_POSCTRL_MODE_MANUAL_ALTITUDE) {
 			/* Need to init because last loop iteration was in a different mode */
 			_hold_alt = _current_altitude;
 		}
 
-		_control_mode_current = FW_POSCTRL_MODE_ALTITUDE;
+		_control_mode_current = FW_POSCTRL_MODE_MANUAL_ALTITUDE;
 
 	} else {
 		_control_mode_current = FW_POSCTRL_MODE_OTHER;
@@ -850,6 +863,73 @@ FixedwingPositionControl::control_auto(const hrt_abstime &now, const Vector2d &c
 	if (use_tecs_pitch) {
 		_att_sp.pitch_body = get_tecs_pitch();
 	}
+
+	_last_manual = !_control_mode.flag_control_position_enabled;
+}
+
+void
+FixedwingPositionControl::control_auto_altitude(const hrt_abstime &now)
+{
+	// only control altitude and airspeed ("fixed-bank loiter")
+
+	tecs_update_pitch_throttle(now, _hold_alt,
+				   _param_fw_airspd_trim.get(),
+				   radians(_param_fw_p_lim_min.get()),
+				   radians(_param_fw_p_lim_max.get()),
+				   _param_fw_thr_min.get(),
+				   _param_fw_thr_max.get(),
+				   _param_fw_thr_cruise.get(),
+				   false,
+				   _param_fw_p_lim_min.get());
+
+
+	_att_sp.roll_body = math::radians(_param_nav_gpsf_r.get()); // open loop loiter bank angle
+	_att_sp.yaw_body = 0.f;
+
+	if (_landed) {
+		_att_sp.thrust_body[0] = _param_fw_thr_min.get();
+
+	} else {
+		_att_sp.thrust_body[0] = min(get_tecs_thrust(), _param_fw_thr_max.get());
+	}
+
+	_att_sp.pitch_body = get_tecs_pitch();
+
+	_last_manual = !_control_mode.flag_control_position_enabled;
+}
+
+void
+FixedwingPositionControl::control_auto_climbrate(const hrt_abstime &now)
+{
+	// only control height rate
+
+	// Hard-code descend rate to 0.5m/s. This is a compromise to give the system to recover,
+	// but not letting it drift too far away.
+	const float descend_rate = -0.5f;
+
+	tecs_update_pitch_throttle(now, _hold_alt,
+				   _param_fw_airspd_trim.get(),
+				   radians(_param_fw_p_lim_min.get()),
+				   radians(_param_fw_p_lim_max.get()),
+				   _param_fw_thr_min.get(),
+				   _param_fw_thr_max.get(),
+				   _param_fw_thr_cruise.get(),
+				   false,
+				   _param_fw_p_lim_min.get(),
+				   tecs_status_s::TECS_MODE_NORMAL,
+				   descend_rate);
+
+	_att_sp.roll_body = math::radians(_param_nav_gpsf_r.get()); // open loop loiter bank angle
+	_att_sp.yaw_body = 0.f;
+
+	if (_landed) {
+		_att_sp.thrust_body[0] = _param_fw_thr_min.get();
+
+	} else {
+		_att_sp.thrust_body[0] = min(get_tecs_thrust(), _param_fw_thr_max.get());
+	}
+
+	_att_sp.pitch_body = get_tecs_pitch();
 
 	_last_manual = !_control_mode.flag_control_position_enabled;
 }
@@ -1638,7 +1718,7 @@ FixedwingPositionControl::control_auto_landing(const hrt_abstime &now, const Vec
 }
 
 void
-FixedwingPositionControl::control_altitude(const hrt_abstime &now, const Vector2d &curr_pos,
+FixedwingPositionControl::control_manual_altitude(const hrt_abstime &now, const Vector2d &curr_pos,
 		const Vector2f &ground_speed)
 {
 	/* ALTITUDE CONTROL: pitch stick moves altitude setpoint, throttle stick sets airspeed */
@@ -1695,7 +1775,7 @@ FixedwingPositionControl::control_altitude(const hrt_abstime &now, const Vector2
 }
 
 void
-FixedwingPositionControl::control_position(const hrt_abstime &now, const Vector2d &curr_pos,
+FixedwingPositionControl::control_manual_position(const hrt_abstime &now, const Vector2d &curr_pos,
 		const Vector2f &ground_speed)
 {
 	const float dt = math::constrain((now - _control_position_last_called) * 1e-6f, 0.01f, 0.05f);
@@ -1965,13 +2045,23 @@ FixedwingPositionControl::Run()
 				break;
 			}
 
-		case FW_POSCTRL_MODE_POSITION: {
-				control_position(_local_pos.timestamp, curr_pos, ground_speed);
+		case FW_POSCTRL_MODE_AUTO_ALTITUDE: {
+				control_auto_altitude(_local_pos.timestamp);
 				break;
 			}
 
-		case FW_POSCTRL_MODE_ALTITUDE: {
-				control_altitude(_local_pos.timestamp, curr_pos, ground_speed);
+		case FW_POSCTRL_MODE_AUTO_CLIMBRATE: {
+				control_auto_climbrate(_local_pos.timestamp);
+				break;
+			}
+
+		case FW_POSCTRL_MODE_MANUAL_POSITION: {
+				control_manual_position(_local_pos.timestamp, curr_pos, ground_speed);
+				break;
+			}
+
+		case FW_POSCTRL_MODE_MANUAL_ALTITUDE: {
+				control_manual_altitude(_local_pos.timestamp, curr_pos, ground_speed);
 				break;
 			}
 
@@ -2005,7 +2095,8 @@ FixedwingPositionControl::Run()
 			if (_control_mode.flag_control_position_enabled ||
 			    _control_mode.flag_control_velocity_enabled ||
 			    _control_mode.flag_control_acceleration_enabled ||
-			    _control_mode.flag_control_altitude_enabled) {
+			    _control_mode.flag_control_altitude_enabled ||
+			    _control_mode.flag_control_climb_rate_enabled) {
 
 				const Quatf q(Eulerf(_att_sp.roll_body, _att_sp.pitch_body, _att_sp.yaw_body));
 				q.copyTo(_att_sp.q_d);
@@ -2165,7 +2256,8 @@ FixedwingPositionControl::tecs_update_pitch_throttle(const hrt_abstime &now, flo
 	bool in_air_alt_control = (!_landed &&
 				   (_control_mode.flag_control_auto_enabled ||
 				    _control_mode.flag_control_velocity_enabled ||
-				    _control_mode.flag_control_altitude_enabled));
+				    _control_mode.flag_control_altitude_enabled ||
+				    _control_mode.flag_control_climb_rate_enabled));
 
 	/* update TECS vehicle state estimates */
 	_tecs.update_vehicle_state_estimates(_airspeed, _body_acceleration(0), (_local_pos.timestamp > 0), in_air_alt_control,

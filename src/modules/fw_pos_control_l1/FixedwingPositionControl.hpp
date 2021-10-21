@@ -329,8 +329,8 @@ private:
 				     const position_setpoint_s &pos_sp_prev,
 				     const position_setpoint_s &pos_sp_curr, const position_setpoint_s &pos_sp_next);
 
-	void		control_auto_altitude(const hrt_abstime &now);
-	void		control_auto_climbrate(const hrt_abstime &now);
+	void		control_auto_fixed_bank_alt_hold(const hrt_abstime &now);
+	void		control_auto_descend(const hrt_abstime &now);
 
 	void		control_auto_position(const hrt_abstime &now, const Vector2d &curr_pos, const Vector2f &ground_speed,
 					      const position_setpoint_s &pos_sp_prev, const position_setpoint_s &pos_sp_curr);
@@ -427,6 +427,10 @@ private:
 
 		(ParamBool<px4::params::FW_POSCTL_INV_ST>) _param_fw_posctl_inv_st,
 
+
+		(ParamInt<px4::params::FW_GPSF_LT>) _param_nav_gpsf_lt,
+		(ParamFloat<px4::params::FW_GPSF_R>) _param_nav_gpsf_r,
+
 		// external parameters
 		(ParamInt<px4::params::FW_ARSP_MODE>) _param_fw_arsp_mode,
 
@@ -436,10 +440,7 @@ private:
 
 		(ParamFloat<px4::params::NAV_LOITER_RAD>) _param_nav_loiter_rad,
 
-		(ParamFloat<px4::params::FW_TKO_PITCH_MIN>) _takeoff_pitch_min,
-
-		(ParamInt<px4::params::NAV_GPSF_LT>) _param_nav_gpsf_lt,
-		(ParamFloat<px4::params::NAV_GPSF_R>) _param_nav_gpsf_r
+		(ParamFloat<px4::params::FW_TKO_PITCH_MIN>) _takeoff_pitch_min
 
 	)
 

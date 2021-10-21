@@ -198,30 +198,3 @@ PARAM_DEFINE_FLOAT(NAV_AH_ALT, 600.0f);
  * @group Mission
  */
 PARAM_DEFINE_INT32(NAV_FORCE_VT, 1);
-
-/**
- * GPS failure loiter time
- *
- * The time in seconds the system should do open loop loiter and wait for GPS recovery
- * before it starts descending. Set to 0 to disable.
- *
- * @unit s
- * @min 0
- * @max 3600
- * @group Mission
- */
-PARAM_DEFINE_INT32(NAV_GPSF_LT, 30);
-
-/**
- * GPS failure fixed roll angle
- *
- * Roll in degrees during the loiter after the vehicle has lost GPS in an auto mode (e.g. mission or loiter).
- *
- * @unit deg
- * @min 0.0
- * @max 30.0
- * @decimal 1
- * @increment 0.5
- * @group Mission
- */
-PARAM_DEFINE_FLOAT(NAV_GPSF_R, 15.0f);

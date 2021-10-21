@@ -878,7 +878,7 @@ FixedwingPositionControl::control_auto(const hrt_abstime &now, const Vector2d &c
 }
 
 void
-FixedwingPositionControl::control_auto_altitude(const hrt_abstime &now)
+FixedwingPositionControl::control_auto_fixed_bank_alt_hold(const hrt_abstime &now)
 {
 	// only control altitude and airspeed ("fixed-bank loiter")
 
@@ -907,7 +907,7 @@ FixedwingPositionControl::control_auto_altitude(const hrt_abstime &now)
 }
 
 void
-FixedwingPositionControl::control_auto_climbrate(const hrt_abstime &now)
+FixedwingPositionControl::control_auto_descend(const hrt_abstime &now)
 {
 	// only control height rate
 
@@ -2053,12 +2053,12 @@ FixedwingPositionControl::Run()
 			}
 
 		case FW_POSCTRL_MODE_AUTO_ALTITUDE: {
-				control_auto_altitude(_local_pos.timestamp);
+				control_auto_fixed_bank_alt_hold(_local_pos.timestamp);
 				break;
 			}
 
 		case FW_POSCTRL_MODE_AUTO_CLIMBRATE: {
-				control_auto_climbrate(_local_pos.timestamp);
+				control_auto_descend(_local_pos.timestamp);
 				break;
 			}
 
